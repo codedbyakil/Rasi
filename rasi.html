@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rasi TV Network</title>
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #000;
+    color: #fff;
+    font-family: sans-serif;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+  }
+  #channels {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 15px;
+    padding: 20px;
+    max-width: 1000px;
+    margin: auto;
+  }
+  .channel-card {
+    background: #222;
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    cursor: pointer;
+    outline: none;
+    user-select: none;
+  }
+  .channel-card:focus {
+    background: #1e90ff;
+    box-shadow: 0 0 8px #1e90ff;
+  }
+  .logo-wrapper {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 10px;
+    border: 2px solid #1e90ff;
+    border-radius: 16px;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .logo-wrapper img {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  #video-container {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: black;
+    display: none;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+  }
+  #video-container.active {
+    display: block;
+    opacity: 1;
+  }
+  #video {
+    width: 100vw;
+    height: 100vh;
+    object-fit: fill; /* stretch full screen */
+    background: #000;
+    pointer-events: none !important; /* disable all interaction */
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+</style>
+</head>
+<body>
+
+<div id="channels">Loading channels…</div>
+
+<div id="video-container">
+  <video id="video" autoplay playsinline muted
+    controlsList="nodownload nofullscreen noremoteplayback" preload="auto" ></video>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script>
+  const channels = [
+    { name: "Rasi TV", logo: "https://raw.githubusercontent.com/codedbyakil/Rasi-TV-Network-IPTV/refs/heads/main/Logos/rasi_tv.png", url: "http://rasinetworks.in:1935/rasitvhd/rasitvhd.stream_aac/playlist.m3u8" },
+    { name: "Rasi Tamil", logo: "https://raw.githubusercontent.com/codedbyakil/Rasi-TV-Network-IPTV/refs/heads/main/Logos/rasi_tamil.png", url: "http://rasinetworks.in:1935/rasitamil/rasitamil.stream_aac/index.m3u8" },
+    { name: "Rasi Movies", logo: "https://raw.githubusercontent.com/codedbyakil/Rasi-TV-Network-IPTV/refs/heads/main/Logos/rasi_movies.png", url: "http://rasinetworks.in:1935/rasimovies/rasimovies.stream_aac/index.m3u8" },
+    { name: "Rasi Music", logo: "https://raw.githubusercontent.com/codedbyakil/Rasi-TV-Network-IPTV/refs/heads/main/Logos/rasi_music.png", url: "http://rasinetworks.in:1935/rasimusic/rasimusic.stream_aac/index.m3u8" },
+    { name: "Rasi Hollywood", logo: "https://raw.githubusercontent.com/codedbyakil/Rasi-TV-Network-IPTV/refs/heads/main/Logos/rasi_hollywood.png", url: "http://rasinetworks.in:1935/rasihollywood/rasihollywood.stream_aac/index.m3u8" },
+    { name: "Rasi Classic", logo: "https://raw.githubusercontent.com/codedbyakil/Rasi-TV-Network-IPTV/refs/heads/main/Logos/rasi_classic.png", url: "http://rasinetworks.in:1935/rasiclassic/rasiclassic.stream_aac/index.m3u8" },
+    { name: "Rasi Comedy", logo: "https://raw.githubusercontent.com/codedbyakil/Rasi-TV-Network-IPTV/refs/heads/main/Logos/rasi_comedy.png", url: "http://rasinetworks.in:1935/rasicomedy/rasicomedy.stream_aac/index.m3u8" }
+  ];
+
+  const channelsDiv = document.getElementById("channels");
+  const videoContainer = document.getElementById("video-container");
+  const video = document.getElementById("video");
+  let hls;
+  let currentIndex = -1;
+
+  function renderChannels() {
+    channelsDiv.innerHTML = "";
+    channels.forEach((ch, index) => {
+      const card = document.createElement("div");
+      card.className = "channel-card";
+      card.tabIndex = 0;
+      card.innerHTML = `
+        <div class="logo-wrapper">
+          <img src="${ch.logo}" alt="Logo"/>
+        </div>
+        <div>${ch.name}</div>
+      `;
+      card.addEventListener("click", () => playChannel(index));
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") playChannel(index);
+      });
+      channelsDiv.appendChild(card);
+    });
+  }
+
+  async function playChannel(index) {
+    if (index < 0 || index >= channels.length) return;
+    currentIndex = index;
+    const url = channels[index].url;
+
+    if (hls) {
+      hls.destroy();
+      hls = null;
+    }
+    video.pause();
+    video.src = "";
+
+    videoContainer.classList.add("active");
+
+    try {
+      await video.requestFullscreen?.();
+      await screen.orientation?.lock?.("landscape");
+    } catch (e) {}
+
+    if (Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = url;
+      video.play();
+    }
+  }
+
+  async function exitVideo() {
+    if (hls) {
+      hls.destroy();
+      hls = null;
+    }
+    video.pause();
+    video.src = "";
+    videoContainer.classList.remove("active");
+
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
+    } catch (e) {}
+
+    try {
+      screen.orientation?.unlock?.();
+    } catch (e) {}
+  }
+
+  // Block all interaction events on video to hide any native UI overlays
+  ["click", "touchstart", "contextmenu", "keydown", "pointerdown"].forEach(evt => {
+    video.addEventListener(evt, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }, { passive: false });
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (videoContainer.classList.contains("active")) {
+      if (e.key === "Escape" || e.key === "Backspace") {
+        e.preventDefault();
+        exitVideo();
+      } else if (e.key === "ArrowUp") {
+        playChannel((currentIndex + 1) % channels.length);
+      } else if (e.key === "ArrowDown") {
+        playChannel((currentIndex - 1 + channels.length) % channels.length);
+      }
+    }
+  });
+
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && videoContainer.classList.contains("active")) {
+      exitVideo();
+    }
+  });
+
+  renderChannels();
+</script>
+
+</body>
+</html>
